@@ -1,5 +1,6 @@
 from polygon import RESTClient
-from config import POLYGON_API_KEY, FINANCIAL_PREP_API_KEY, MONGO_DB_USER, MONGO_DB_PASS, API_KEY, API_SECRET, BASE_URL, mongo_url
+from config import POLYGON_API_KEY, FINANCIAL_PREP_API_KEY, MONGO_DB_USER, MONGO_DB_PASS, API_KEY, API_SECRET, BASE_URL, \
+    mongo_url, local_mongo_url
 import json
 import certifi
 from urllib.request import urlopen
@@ -13,6 +14,7 @@ from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
 from alpaca.data.historical.stock import StockHistoricalDataClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
+
 from strategies.archived_strategies.trading_strategies_v1 import get_historical_data
 import yfinance as yf
 import logging
@@ -85,7 +87,7 @@ def main():
     client = RESTClient(api_key=POLYGON_API_KEY)
     trading_client = TradingClient(API_KEY, API_SECRET)
     stock_client = StockHistoricalDataClient(API_KEY, API_SECRET)
-    mongo_client = MongoClient(mongo_url)
+    mongo_client = MongoClient(mongo_url if local_mongo_url is None or local_mongo_url == '' else local_mongo_url)
     db = mongo_client.trades
     asset_collection = db.assets_quantities
     limits_collection = db.assets_limit
@@ -120,8 +122,8 @@ def main():
                     post_hour_first_iteration = True
                     
             account = trading_client.get_account()
-            qqq_latest = get_latest_price('QQQ')
-            spy_latest = get_latest_price('SPY')
+            qqq_latest = get_latest_price('QQQ',stock_client)
+            spy_latest = get_latest_price('SPY', stock_client)
             
             buy_heap = []
             suggestion_heap = []
@@ -170,8 +172,9 @@ def main():
                         while historical_data is None:
                             try:
                                 period = indicator_collection.find_one({'indicator': strategy.__name__})
-                                historical_data = get_data(ticker, mongo_client, period['ideal_period'])
-                            except:
+                                historical_data = get_data(ticker, period['ideal_period'])
+                            except Exception as e:
+                                print(e)
                                 print(f"Error fetching data for {ticker}. Retrying...")
                         
                         decision, quantity = simulate_strategy(strategy, ticker, current_price, historical_data, buying_power, portfolio_qty, portfolio_value)
